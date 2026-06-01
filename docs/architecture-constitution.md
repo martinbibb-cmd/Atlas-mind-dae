@@ -49,14 +49,15 @@ It is not responsible for:
 
 1. Nothing visual exists until the contract exists.
 2. Nothing is recommended until it can be simulated.
-3. Nothing is simulated until it can be represented in a twin.
+3. Simulation operates on twin representations.
 4. Unknown is a valid state.
 5. Provenance is never discarded.
-6. Evidence may be observed, measured, inferred, customer-stated, or unknown.
-7. Engines own computation.
-8. Visualisation owns presentation.
-9. Simulation Core owns orchestration.
-10. Cost, finance, grants, and lending remain external integrations.
+6. Identity resolution is an inferred model and must not be treated as observed truth unless explicitly promoted into Contracts.
+7. Evidence may be observed, measured, inferred, customer-stated, or unknown.
+8. Engines own computation.
+9. Visualisation owns presentation.
+10. Simulation Core owns orchestration.
+11. Cost, finance, grants, and lending remain external integrations.
 
 ## AI Guardrails
 

@@ -16,9 +16,11 @@ Atlas recognises that long-term property identity may require concepts such as:
 * Timeline
 * Snapshot
 
-However these concepts remain internal to Mind during Alpha.
+Locus, Timeline, and Snapshot are currently Mind-only analytical constructs.
 
-They are not persisted within Contracts DAE.
+Contracts stores observations and signed outputs.
+
+Mind may create, modify, replace, or discard identity-resolution models without requiring Contracts schema changes.
 
 ## Reasoning
 
@@ -31,6 +33,10 @@ Contracts stores observations.
 Mind performs inferences.
 
 ## Locus Promotion Rule
+
+Architectural concepts must earn promotion.
+
+No inferred model should be elevated into Contracts until practical implementation demonstrates clear operational value that cannot be achieved within Mind alone.
 
 Locus should only be promoted into Contracts if one or more of the following become true:
 
