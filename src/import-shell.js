@@ -111,6 +111,7 @@ function summarizeCompiledTwin(compiledTwin) {
     propertyRef: compiledTwin.propertyRef,
     relationshipCount: compiledTwin.relationships.length,
     systemAssetCount: compiledTwin.systemTwin.observationIds.length,
+    waterSupplyObservationCount: compiledTwin.waterSupplyObservations.length,
     unknownCount: stateCounts.unknown,
     unresolvedCount: stateCounts.unresolved,
     visitId: compiledTwin.visitId,
@@ -205,6 +206,7 @@ function renderImportShellPage({ summary = null, inspection = null, issues = [],
           <li><strong>Home context:</strong> ${summary.homeContextCount}</li>
           <li><strong>Relationships:</strong> ${summary.relationshipCount}</li>
           <li><strong>Evidence count:</strong> ${summary.evidenceCount}</li>
+          <li><strong>Water supply observations:</strong> ${summary.waterSupplyObservationCount}</li>
           <li><strong>Unknown count:</strong> ${summary.unknownCount}</li>
           <li><strong>Approximate count:</strong> ${summary.approximateCount}</li>
           <li><strong>Unresolved count:</strong> ${summary.unresolvedCount}</li>
@@ -352,6 +354,7 @@ function buildInspectionData(compiledTwin) {
     unknown: formatUncertaintyStates(compiledTwin.confidenceStates, 'unknown'),
     unresolved: formatUncertaintyStates(compiledTwin.confidenceStates, 'unresolved'),
   };
+  const waterSupply = compiledTwin.waterSupplyObservations.map(formatWaterSupplyObservation);
 
   return {
     areas,
@@ -360,6 +363,8 @@ function buildInspectionData(compiledTwin) {
     relationships,
     systemAssets,
     uncertainty,
+    waterSupply,
+    waterSupplyUncertainty: buildWaterSupplyUncertainty(waterSupply),
   };
 }
 
@@ -381,12 +386,17 @@ function renderInspectionSections(inspection) {
         ${renderEvidenceTable(inspection.evidence)}
       </section>
       <section>
+        <h2>Water Supply</h2>
+        ${renderWaterSupplyTable(inspection.waterSupply)}
+      </section>
+      <section>
         <h2>Provenance</h2>
         ${renderProvenanceTable(inspection.provenance)}
       </section>
       <section>
         <h2>Uncertainty</h2>
         ${renderUncertaintyTables(inspection.uncertainty)}
+        ${renderWaterSupplyUncertainty(inspection.waterSupplyUncertainty)}
       </section>
       ${renderTwinMapViews(inspection)}`;
 }
@@ -478,6 +488,35 @@ function renderEvidenceTable(evidence) {
   </table>`;
 }
 
+function renderWaterSupplyTable(observations) {
+  if (observations.length === 0) {
+    return '<p class="muted">None</p>';
+  }
+
+  return `<table>
+    <thead>
+      <tr><th>Observation</th><th>Method</th><th>Quality</th><th>Location</th><th>Intent</th><th>Values</th><th>Limitations</th><th>Evidence</th><th>Confidence</th></tr>
+    </thead>
+    <tbody>
+      ${observations
+        .map(
+          (observation) => `<tr>
+        <td>${escapeHtml(observation.id)}</td>
+        <td>${escapeHtml(observation.method)}</td>
+        <td>${escapeHtml(observation.methodQuality)}</td>
+        <td>${escapeHtml(observation.location)}</td>
+        <td>${escapeHtml(observation.intent)}</td>
+        <td>${escapeHtml(observation.values)}</td>
+        <td>${escapeHtml(observation.limitations)}</td>
+        <td>${escapeHtml(formatList(observation.evidenceIDs))}</td>
+        <td>${escapeHtml(observation.confidence)}</td>
+      </tr>`,
+        )
+        .join('')}
+    </tbody>
+  </table>`;
+}
+
 function renderProvenanceTable(provenance) {
   return `<table>
     <thead>
@@ -513,6 +552,27 @@ function renderUncertaintyTables(uncertainty) {
       ${renderUncertaintyTable(uncertainty.unresolved)}
     </section>
   </div>`;
+}
+
+function renderWaterSupplyUncertainty(waterSupplyUncertainty) {
+  return `<section>
+    <h3>Water supply uncertainty</h3>
+    <table>
+      <thead>
+        <tr><th>Category</th><th>Observations</th></tr>
+      </thead>
+      <tbody>
+        ${Object.entries(waterSupplyUncertainty)
+          .map(
+            ([category, values]) => `<tr>
+        <td>${escapeHtml(category)}</td>
+        <td>${escapeHtml(formatList(values))}</td>
+      </tr>`,
+          )
+          .join('')}
+      </tbody>
+    </table>
+  </section>`;
 }
 
 function renderUncertaintyTable(items) {
@@ -572,6 +632,91 @@ function formatUncertaintyStates(confidenceStates, targetState) {
     }));
 }
 
+function formatWaterSupplyObservation(observation) {
+  const values = Array.isArray(observation.values) ? observation.values : [];
+  return {
+    absenceReason: readStringField(observation, ['absenceReason', 'absence_reason']) ?? null,
+    confidence: readStringField(observation, ['confidence']) ?? 'unknown',
+    evidenceIDs: readStringArrayField(observation, ['evidenceIDs', 'evidence_ids']),
+    id: readStringField(observation, ['id']) ?? 'unknown-water-supply-observation',
+    intent: readStringField(observation, ['intent']) ?? 'unknown',
+    limitations: formatList(Array.isArray(observation.suspectedLimitations) ? observation.suspectedLimitations : []),
+    location: readStringField(observation, ['location']) ?? 'unknown',
+    method: readStringField(observation, ['method']) ?? 'unknown',
+    methodQuality: waterSupplyMethodQuality(readStringField(observation, ['method']) ?? 'unknown'),
+    notes: readStringField(observation, ['notes']) ?? '',
+    provenance: formatProvenance(observation.provenance),
+    rawObservation: cloneValue(observation),
+    valueNames: values.map((value) => readStringField(value, ['name'])).filter(Boolean),
+    values: values.map(formatWaterValue).join('; ') || 'none',
+  };
+}
+
+function formatWaterValue(value) {
+  const name = readStringField(value, ['name']) ?? 'value';
+  const rawValue = Object.prototype.hasOwnProperty.call(value, 'value') ? value.value : 'unknown';
+  const unit = readStringField(value, ['unit']);
+  const condition = readStringField(value, ['condition']);
+  const confidence = readStringField(value, ['confidence']);
+  return `${name}: ${rawValue}${unit ? ` ${unit}` : ''}${condition ? ` @ ${condition}` : ''}${confidence ? ` (${confidence})` : ''}`;
+}
+
+function buildWaterSupplyUncertainty(observations) {
+  const grouped = {
+    'measured pressure+flow': [],
+    'flow-only': [],
+    'pressure-only': [],
+    'customer-reported': [],
+    'not tested': [],
+    'conflicting/multiple observations': [],
+  };
+
+  for (const observation of observations) {
+    const valueNames = new Set(observation.valueNames);
+    const hasPressure = ['staticPressure', 'dynamicPressure', 'residualPressure', 'flowAtPressure'].some((name) =>
+      valueNames.has(name),
+    );
+    const hasFlow = ['flowRate', 'flowAtPressure'].some((name) => valueNames.has(name));
+
+    if (observation.method === 'customerReported') {
+      grouped['customer-reported'].push(observation.id);
+    } else if (observation.method === 'notTested') {
+      grouped['not tested'].push(`${observation.id}${observation.absenceReason ? ` (${observation.absenceReason})` : ''}`);
+    } else if (hasPressure && hasFlow) {
+      grouped['measured pressure+flow'].push(observation.id);
+    } else if (hasFlow) {
+      grouped['flow-only'].push(observation.id);
+    } else if (hasPressure) {
+      grouped['pressure-only'].push(observation.id);
+    }
+  }
+
+  if (observations.length > 1) {
+    grouped['conflicting/multiple observations'].push(...observations.map((observation) => observation.id));
+  }
+
+  return grouped;
+}
+
+function waterSupplyMethodQuality(method) {
+  switch (method) {
+    case 'digitalPressureFlowLogger':
+      return 'best evidence';
+    case 'pressureFlowTestKit':
+      return 'good evidence';
+    case 'flowCup':
+      return 'useful but local only';
+    case 'pressureGauge':
+      return 'pressure-only evidence';
+    case 'customerReported':
+      return 'context only';
+    case 'notTested':
+      return 'valid absence';
+    default:
+      return 'recorded observation';
+  }
+}
+
 function inferAssetSubtype(asset) {
   const type = readStringField(asset.rawObservation, ['type']);
   return type ? `${asset.tag}:${type}` : asset.tag;
@@ -610,6 +755,10 @@ function formatList(values) {
 }
 
 function readStringField(value, keys) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
   for (const key of keys) {
     if (typeof value[key] === 'string' && value[key].trim() !== '') {
       return value[key];
@@ -617,6 +766,24 @@ function readStringField(value, keys) {
   }
 
   return null;
+}
+
+function readStringArrayField(value, keys) {
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
+  for (const key of keys) {
+    if (Array.isArray(value[key])) {
+      return value[key].filter((entry) => typeof entry === 'string');
+    }
+  }
+
+  return [];
+}
+
+function cloneValue(value) {
+  return value === undefined ? undefined : structuredClone(value);
 }
 
 function escapeHtml(value) {

@@ -8,6 +8,51 @@ const RELATIONSHIP_TYPES = new Set([
   'supplies',
   'serves',
 ]);
+const CONFIDENCE_STATES = new Set(['approximate', 'observed', 'unknown', 'unresolved']);
+const WATER_SUPPLY_METHODS = new Set([
+  'digitalPressureFlowLogger',
+  'pressureFlowTestKit',
+  'flowCup',
+  'pressureGauge',
+  'customerReported',
+  'notTested',
+  'other',
+  'unknown',
+]);
+const WATER_SUPPLY_LOCATIONS = new Set([
+  'outsideTap',
+  'kitchenColdTap',
+  'internalStopTap',
+  'washingMachineValve',
+  'bathroomBasinTap',
+  'bathTap',
+  'showerOutlet',
+  'cylinderCupboard',
+  'cylinderColdInlet',
+  'loftTankFeed',
+  'waterMain',
+  'other',
+  'unknown',
+]);
+const WATER_SUPPLY_INTENTS = new Set([
+  'incomingMainCapacity',
+  'usableHouseholdCapacity',
+  'hotWaterPlantFeed',
+  'servicePointExperience',
+  'customerComplaintContext',
+  'notTested',
+  'unknown',
+]);
+const WATER_VALUE_NAMES = new Set([
+  'staticPressure',
+  'dynamicPressure',
+  'residualPressure',
+  'flowRate',
+  'flowAtPressure',
+  'waterTemperature',
+  'tds',
+  'qualitativeObservation',
+]);
 const FORBIDDEN_OUTPUT_FIELDS = new Set([
   'recommendedOption',
   'bestOption',
@@ -129,6 +174,7 @@ function parseDaedalusPackage(input) {
     }
   }
 
+  const waterSupplyObservations = normalizeWaterSupplyObservations(normalizedPackage, issues, observationIds);
   const relationships = collectRelationships(normalizedPackage, issues, observationIds);
 
   if (issues.length > 0) {
@@ -141,6 +187,7 @@ function parseDaedalusPackage(input) {
     propertyRef,
     rawPackage: normalizedPackage,
     relationships,
+    waterSupplyObservations,
     visitId,
   };
 }
@@ -189,7 +236,7 @@ function compileUnifiedPropertyTwin(parsedPackage) {
     packageId: parsedPackage.packageId,
     packageVersion: parsedPackage.packageVersion,
     propertyRef: parsedPackage.propertyRef,
-    provenanceLinks: buildProvenanceLinks(observations, relationships),
+    provenanceLinks: buildProvenanceLinks(observations, relationships, parsedPackage.waterSupplyObservations),
     relationships,
     sourcePackage: cloneValue(parsedPackage.rawPackage),
     systemTwin: {
@@ -204,12 +251,140 @@ function compileUnifiedPropertyTwin(parsedPackage) {
       propertyRef: parsedPackage.propertyRef,
       visitId: parsedPackage.visitId,
     },
+    waterSupplyObservations: cloneValue(parsedPackage.waterSupplyObservations),
     visitId: parsedPackage.visitId,
   };
 
   assertNoForbiddenFields(compiledModel);
 
   return compiledModel;
+}
+
+function normalizeWaterSupplyObservations(rawPackage, issues, observationIds) {
+  const waterSupplyObservations = rawPackage.waterSupplyObservations ?? [];
+  const evidenceObservationIds = new Set(
+    (Array.isArray(rawPackage.observations) ? rawPackage.observations : [])
+      .filter((observation) => isEvidenceTag(normalizeTag(readStringAlias(observation, ['tag']))))
+      .map((observation) => readStringAlias(observation, ['observationId', 'observation_id']))
+      .filter(Boolean),
+  );
+
+  if (!Array.isArray(waterSupplyObservations)) {
+    issues.push(
+      createIssue(
+        ['waterSupplyObservations'],
+        'invalid_type',
+        'waterSupplyObservations must be an array when provided.',
+        waterSupplyObservations,
+      ),
+    );
+    return [];
+  }
+
+  const ids = new Set();
+  for (const [index, observation] of waterSupplyObservations.entries()) {
+    validateWaterSupplyObservation(observation, index, issues, ids, evidenceObservationIds, observationIds);
+  }
+
+  return cloneValue(waterSupplyObservations);
+}
+
+function validateWaterSupplyObservation(observation, index, issues, waterObservationIds, evidenceObservationIds) {
+  const path = ['waterSupplyObservations', index];
+
+  if (!isPlainObject(observation)) {
+    issues.push(createIssue(path, 'invalid_type', 'Water supply observation must be an object.'));
+    return;
+  }
+
+  const id = readStringAlias(observation, ['id']);
+  const method = readStringAlias(observation, ['method']);
+  const location = readStringAlias(observation, ['location']);
+  const intent = readStringAlias(observation, ['intent']);
+  const confidence = readStringAlias(observation, ['confidence']);
+
+  if (!id) {
+    issues.push(createIssue(path.concat('id'), 'missing_field', 'Water supply observation id is required.'));
+  } else if (waterObservationIds.has(id)) {
+    issues.push(createIssue(path.concat('id'), 'duplicate_water_supply_observation_id', 'Water supply observation id must be unique.', id));
+  } else {
+    waterObservationIds.add(id);
+  }
+
+  if (!WATER_SUPPLY_METHODS.has(method)) {
+    issues.push(createIssue(path.concat('method'), 'unsupported_water_supply_method', 'Unsupported water supply method.', method ?? null));
+  }
+
+  if (!WATER_SUPPLY_LOCATIONS.has(location)) {
+    issues.push(createIssue(path.concat('location'), 'unsupported_water_supply_location', 'Unsupported water supply location.', location ?? null));
+  }
+
+  if (!WATER_SUPPLY_INTENTS.has(intent)) {
+    issues.push(createIssue(path.concat('intent'), 'unsupported_water_supply_intent', 'Unsupported water supply intent.', intent ?? null));
+  }
+
+  if (!CONFIDENCE_STATES.has(confidence)) {
+    issues.push(createIssue(path.concat('confidence'), 'unsupported_confidence_state', 'Unsupported confidence state.', confidence ?? null));
+  }
+
+  validateProvenance(observation, path, issues);
+
+  if (method === 'notTested' && !readStringAlias(observation, ['absenceReason']) && !readStringAlias(observation, ['notes'])) {
+    issues.push(createIssue(path.concat('absenceReason'), 'water_supply_absence_reason_missing', 'notTested water observations require absenceReason or notes.'));
+  }
+
+  const values = Array.isArray(observation.values) ? observation.values : [];
+  if (!Array.isArray(observation.values)) {
+    issues.push(createIssue(path.concat('values'), 'invalid_type', 'Water supply values must be an array.'));
+  }
+
+  const hasQualitativeObservation = values.some((value) => readStringAlias(value, ['name']) === 'qualitativeObservation');
+  if (method === 'customerReported' && !hasQualitativeObservation && !readStringAlias(observation, ['notes'])) {
+    issues.push(createIssue(path.concat('values'), 'water_supply_customer_report_missing', 'customerReported water observations require qualitativeObservation or notes.'));
+  }
+
+  values.forEach((value, valueIndex) => {
+    validateWaterSupplyValue(value, path.concat('values', valueIndex), issues);
+  });
+
+  const evidenceIDs = readStringArrayAlias(observation, ['evidenceIDs', 'evidence_ids']);
+  for (const [evidenceIndex, evidenceID] of evidenceIDs.entries()) {
+    if (!evidenceObservationIds.has(evidenceID)) {
+      issues.push(
+        createIssue(
+          path.concat('evidenceIDs', evidenceIndex),
+          'missing_water_supply_evidence_ref',
+          `Water supply evidenceID "${evidenceID}" does not match an evidence observation.`,
+          evidenceID,
+        ),
+      );
+    }
+  }
+}
+
+function validateWaterSupplyValue(value, path, issues) {
+  if (!isPlainObject(value)) {
+    issues.push(createIssue(path, 'invalid_type', 'Water supply value must be an object.'));
+    return;
+  }
+
+  const name = readStringAlias(value, ['name']);
+  if (!WATER_VALUE_NAMES.has(name)) {
+    issues.push(createIssue(path.concat('name'), 'unsupported_water_supply_value_name', 'Unsupported water supply value name.', name ?? null));
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(value, 'value')) {
+    issues.push(createIssue(path.concat('value'), 'missing_field', 'Water supply value is required.'));
+  }
+
+  if (typeof value.value === 'number' && !readStringAlias(value, ['unit'])) {
+    issues.push(createIssue(path.concat('unit'), 'water_supply_value_unit_missing', 'Numeric water supply values require unit.'));
+  }
+
+  const confidence = readStringAlias(value, ['confidence']);
+  if (confidence && !CONFIDENCE_STATES.has(confidence)) {
+    issues.push(createIssue(path.concat('confidence'), 'unsupported_confidence_state', 'Unsupported value confidence state.', confidence));
+  }
 }
 
 function validateObservation(observation, index, issues, observationIds) {
@@ -434,10 +609,16 @@ function classifyObservation(tag, observation) {
 function collectConfidenceStates(rawPackage, relationships) {
   const states = [];
   const observations = Array.isArray(rawPackage.observations) ? rawPackage.observations : [];
+  const waterSupplyObservations = Array.isArray(rawPackage.waterSupplyObservations) ? rawPackage.waterSupplyObservations : [];
 
   for (const observation of observations) {
     const observationId = readStringAlias(observation, ['observationId', 'observation_id']) ?? 'unknown-observation';
     walkConfidence(observation, [], `observation:${observationId}`, states);
+  }
+
+  for (const observation of waterSupplyObservations) {
+    const observationId = readStringAlias(observation, ['id']) ?? 'unknown-water-supply-observation';
+    walkConfidence(observation, [], `waterSupplyObservation:${observationId}`, states);
   }
 
   for (const relationship of relationships) {
@@ -547,7 +728,7 @@ function extractConfidencePayload(value) {
   return Object.keys(payload).length > 0 ? payload : null;
 }
 
-function buildProvenanceLinks(observations, relationships) {
+function buildProvenanceLinks(observations, relationships, waterSupplyObservations = []) {
   const observationLinks = observations.map((observation) => ({
     evidenceRefs: cloneArray(observation.evidenceRefs),
     provenance: cloneValue(observation.provenance),
@@ -560,8 +741,14 @@ function buildProvenanceLinks(observations, relationships) {
     sourceRef: relationship.relationshipId,
     sourceType: 'relationship',
   }));
+  const waterSupplyLinks = waterSupplyObservations.map((observation) => ({
+    evidenceRefs: cloneArray(readStringArrayAlias(observation, ['evidenceIDs', 'evidence_ids'])),
+    provenance: cloneValue(readProvenance(observation)),
+    sourceRef: readStringAlias(observation, ['id']) ?? 'unknown-water-supply-observation',
+    sourceType: 'waterSupplyObservation',
+  }));
 
-  return observationLinks.concat(relationshipLinks);
+  return observationLinks.concat(relationshipLinks, waterSupplyLinks);
 }
 
 function assertNoForbiddenFields(value, path = []) {
@@ -628,6 +815,10 @@ function readPackageVersion(value) {
 }
 
 function readStringAlias(value, keys) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
   for (const key of keys) {
     if (typeof value[key] === 'string' && value[key].trim() !== '') {
       return value[key];
@@ -637,6 +828,10 @@ function readStringAlias(value, keys) {
 }
 
 function readStringArrayAlias(value, keys) {
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
   for (const key of keys) {
     if (Array.isArray(value[key])) {
       return value[key].filter((entry) => typeof entry === 'string');
