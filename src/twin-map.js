@@ -90,7 +90,7 @@ function buildTwinMapData(inspection) {
  */
 function renderTwinMapViews(inspection) {
   const mapData = buildTwinMapData(inspection);
-  const detailData = buildDetailData(inspection);
+  const detailData = buildDetailData(mapData);
 
   return `<section>
         <h2>Twin map — 2D spatial view</h2>
@@ -147,10 +147,10 @@ function renderTwinMapViews(inspection) {
 
 // ── Internal: detail data ─────────────────────────────────────────────────────
 
-function buildDetailData(inspection) {
+function buildDetailData(mapData) {
   const detail = {};
 
-  for (const area of inspection.areas) {
+  for (const area of mapData.areas) {
     detail[area.id] = {
       kind: 'area',
       id: area.id,
@@ -162,7 +162,7 @@ function buildDetailData(inspection) {
     };
   }
 
-  for (const asset of inspection.systemAssets) {
+  for (const asset of mapData.systemAssets) {
     detail[asset.id] = {
       kind: 'asset',
       id: asset.id,
@@ -178,7 +178,7 @@ function buildDetailData(inspection) {
     };
   }
 
-  for (const rel of inspection.relationships) {
+  for (const rel of mapData.relationships) {
     detail[rel.id] = {
       kind: 'relationship',
       id: rel.id,
@@ -190,7 +190,7 @@ function buildDetailData(inspection) {
     };
   }
 
-  for (const ev of inspection.evidence) {
+  for (const ev of mapData.evidence) {
     detail[ev.id] = {
       kind: 'evidence',
       id: ev.id,
