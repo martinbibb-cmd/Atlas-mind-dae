@@ -41,6 +41,7 @@ test('renders compiled twin summary for a valid package import', async () => {
   assert.match(body, /Home context:<\/strong> 5/);
   assert.match(body, /Relationships:<\/strong> 5/);
   assert.match(body, /Evidence count:<\/strong> 3/);
+  assert.match(body, /Water supply observations:<\/strong> 0/);
   assert.match(body, /Unknown count:<\/strong> 5/);
   assert.match(body, /Approximate count:<\/strong> 2/);
   assert.match(body, /Unresolved count:<\/strong> 3/);
@@ -93,6 +94,7 @@ test('summarizes compiled twin counts needed by the shell', () => {
     propertyRef: 'prop-main-001',
     relationshipCount: 5,
     systemAssetCount: 4,
+    waterSupplyObservationCount: 0,
     unknownCount: 5,
     unresolvedCount: 3,
     visitId: 'visit-003',
