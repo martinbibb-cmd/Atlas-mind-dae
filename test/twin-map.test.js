@@ -62,6 +62,44 @@ test('buildTwinMapData: relationships and evidence pass through', () => {
   assert.equal(mapData.evidence.length, inspection.evidence.length);
 });
 
+test('buildTwinMapData: only renders sourced nodes and imported relationships with valid endpoints', () => {
+  const inspection = loadInspection();
+  inspection.systemAssets.push({
+    areaRef: null,
+    category: 'system',
+    confidence: 'none',
+    evidenceCount: 0,
+    id: 'synthetic-node',
+    inCount: 0,
+    outCount: 0,
+    placementState: 'unplaced',
+    subtype: 'synthetic',
+  });
+  inspection.relationships.push({
+    confidence: 'none',
+    id: 'synthetic-rel',
+    provenance: 'none',
+    source: 'synthetic-node',
+    target: 'boiler-001',
+    type: 'connectedTo',
+  });
+
+  const mapData = buildTwinMapData(inspection);
+
+  assert.ok(!mapData.assetById.has('synthetic-node'));
+  assert.ok(!mapData.relationships.some((rel) => rel.id === 'synthetic-rel'));
+});
+
+test('buildTwinMapData: filters recommendation-like fields from node payloads', () => {
+  const inspection = loadInspection();
+  const boiler = inspection.systemAssets.find((asset) => asset.id === 'boiler-001');
+  boiler.recommendation = 'choose this option';
+
+  const mapData = buildTwinMapData(inspection);
+
+  assert.ok(!mapData.assetById.has('boiler-001'));
+});
+
 // ── renderTwinMapViews ────────────────────────────────────────────────────────
 
 test('renderTwinMapViews: renders spatial map section heading', () => {
@@ -151,6 +189,22 @@ test('renderTwinMapViews: detail JSON includes evidence and provenance fields', 
   assert.match(html, /"evidenceCount"/);
   assert.match(html, /"provenance"/);
   assert.match(html, /"confidence"/);
+});
+
+test('renderTwinMapViews: relationship graph stays on imported relationship IDs only', () => {
+  const inspection = loadInspection();
+  inspection.relationships.push({
+    confidence: 'none',
+    id: 'synthetic-rel-2',
+    provenance: 'none',
+    source: 'boiler-001',
+    target: 'cylinder-001',
+    type: 'controls',
+  });
+  const html = renderTwinMapViews(inspection);
+
+  assert.doesNotMatch(html, /synthetic-rel-2/);
+  assert.match(html, /data-twin-id="rel-001"/);
 });
 
 test('renderTwinMapViews: area-grouped asset (radiator-001) appears with dashed node class', () => {

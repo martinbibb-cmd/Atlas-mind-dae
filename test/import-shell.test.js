@@ -113,4 +113,6 @@ test('builds inspection data with evidence and relationship links', () => {
   assert.ok(inspection.uncertainty.unknown.length > 0);
   assert.ok(inspection.uncertainty.approximate.length > 0);
   assert.ok(inspection.uncertainty.unresolved.length > 0);
+  assert.notEqual(inspection.systemAssets[0].provenance, 'none');
+  assert.notEqual(inspection.areas[0].provenance, 'none');
 });
