@@ -18,6 +18,7 @@ const STATE_STROKE = {
 
 const PLACED_STROKE = '#0969da';
 const UNPLACED_STROKE = '#8c959f';
+const FORBIDDEN_OUTPUT_FIELDS = new Set(['recommendation', 'rank', 'score', 'suitability', 'pricing']);
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 
@@ -38,15 +39,21 @@ const LANEM = 36;    // unplaced lane top margin above nodes
  * @returns {object}
  */
 function buildTwinMapData(inspection) {
-  const assetById = new Map(inspection.systemAssets.map((a) => [a.id, a]));
+  const areas = inspection.areas.filter(isSourcedNode);
+  const systemAssets = inspection.systemAssets.filter(isSourcedNode);
+  const assetById = new Map(systemAssets.map((a) => [a.id, a]));
+  const areaIdSet = new Set(areas.map((area) => area.id));
+  const nodeIdSet = new Set([...areaIdSet, ...assetById.keys()]);
 
   // Assets with a direct containedIn relationship
-  const placedSet = new Set(inspection.areas.flatMap((a) => a.containedAssets));
+  const placedSet = new Set(
+    areas.flatMap((a) => a.containedAssets).filter((assetId) => assetById.has(assetId)),
+  );
 
   // Assets area-grouped via areaRef (room_ref present but no containedIn)
-  const groupedByArea = new Map(inspection.areas.map((a) => [a.id, []]));
-  for (const asset of inspection.systemAssets) {
-    if (!placedSet.has(asset.id) && asset.areaRef && groupedByArea.has(asset.areaRef)) {
+  const groupedByArea = new Map(areas.map((a) => [a.id, []]));
+  for (const asset of systemAssets) {
+    if (!placedSet.has(asset.id) && asset.areaRef && areaIdSet.has(asset.areaRef)) {
       groupedByArea.get(asset.areaRef).push(asset.id);
     }
   }
@@ -55,12 +62,18 @@ function buildTwinMapData(inspection) {
     ...placedSet,
     ...Array.from(groupedByArea.values()).flat(),
   ]);
-  const unplacedAssets = inspection.systemAssets.filter((a) => !groupedSet.has(a.id));
+  const unplacedAssets = systemAssets.filter((a) => !groupedSet.has(a.id));
+  const relationships = inspection.relationships.filter(
+    (relationship) =>
+      isSourcedRelationship(relationship) &&
+      nodeIdSet.has(relationship.source) &&
+      nodeIdSet.has(relationship.target),
+  );
 
   return {
-    areas: inspection.areas,
-    systemAssets: inspection.systemAssets,
-    relationships: inspection.relationships,
+    areas,
+    systemAssets,
+    relationships,
     evidence: inspection.evidence,
     assetById,
     placedSet,
@@ -77,7 +90,7 @@ function buildTwinMapData(inspection) {
  */
 function renderTwinMapViews(inspection) {
   const mapData = buildTwinMapData(inspection);
-  const detailData = buildDetailData(inspection);
+  const detailData = buildDetailData(mapData);
 
   return `<section>
         <h2>Twin map — 2D spatial view</h2>
@@ -134,10 +147,10 @@ function renderTwinMapViews(inspection) {
 
 // ── Internal: detail data ─────────────────────────────────────────────────────
 
-function buildDetailData(inspection) {
+function buildDetailData(mapData) {
   const detail = {};
 
-  for (const area of inspection.areas) {
+  for (const area of mapData.areas) {
     detail[area.id] = {
       kind: 'area',
       id: area.id,
@@ -145,10 +158,11 @@ function buildDetailData(inspection) {
       placementState: area.placementState,
       confidence: area.confidence,
       containedAssets: area.containedAssets.join(', ') || 'none',
+      provenance: area.provenance,
     };
   }
 
-  for (const asset of inspection.systemAssets) {
+  for (const asset of mapData.systemAssets) {
     detail[asset.id] = {
       kind: 'asset',
       id: asset.id,
@@ -160,10 +174,11 @@ function buildDetailData(inspection) {
       evidenceCount: asset.evidenceCount,
       relationshipsIn: asset.inCount,
       relationshipsOut: asset.outCount,
+      provenance: asset.provenance,
     };
   }
 
-  for (const rel of inspection.relationships) {
+  for (const rel of mapData.relationships) {
     detail[rel.id] = {
       kind: 'relationship',
       id: rel.id,
@@ -175,7 +190,7 @@ function buildDetailData(inspection) {
     };
   }
 
-  for (const ev of inspection.evidence) {
+  for (const ev of mapData.evidence) {
     detail[ev.id] = {
       kind: 'evidence',
       id: ev.id,
@@ -553,6 +568,58 @@ function eh(value) {
 
 function f(n) {
   return Math.round(n * 10) / 10;
+}
+
+function isSourcedNode(node) {
+  if (!node || typeof node !== 'object') {
+    return false;
+  }
+
+  if (typeof node.id !== 'string' || node.id.trim() === '') {
+    return false;
+  }
+
+  return hasValidProvenance(node.provenance) && !hasForbiddenField(node);
+}
+
+function isSourcedRelationship(relationship) {
+  if (!relationship || typeof relationship !== 'object') {
+    return false;
+  }
+
+  if (typeof relationship.id !== 'string' || relationship.id.trim() === '') {
+    return false;
+  }
+
+  if (typeof relationship.source !== 'string' || relationship.source.trim() === '') {
+    return false;
+  }
+
+  if (typeof relationship.target !== 'string' || relationship.target.trim() === '') {
+    return false;
+  }
+
+  if (typeof relationship.type !== 'string' || relationship.type.trim() === '') {
+    return false;
+  }
+
+  return hasValidProvenance(relationship.provenance) && !hasForbiddenField(relationship);
+}
+
+function hasValidProvenance(provenance) {
+  if (typeof provenance !== 'string') {
+    return false;
+  }
+
+  const normalized = provenance.toLowerCase();
+  return normalized !== 'none' && !normalized.includes('unknown-method');
+}
+
+function hasForbiddenField(value) {
+  return Object.keys(value).some((key) => {
+    const normalizedKey = key.toLowerCase();
+    return Array.from(FORBIDDEN_OUTPUT_FIELDS).some((forbidden) => normalizedKey.includes(forbidden));
+  });
 }
 
 module.exports = {

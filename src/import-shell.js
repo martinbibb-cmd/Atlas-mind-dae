@@ -304,6 +304,7 @@ function buildInspectionData(compiledTwin) {
     inCount: (inByObservationId.get(asset.observationId) ?? []).length,
     outCount: (outByObservationId.get(asset.observationId) ?? []).length,
     placementState: inferAssetPlacementState(asset.observationId, outByObservationId),
+    provenance: formatProvenance(asset.provenance),
     subtype: inferAssetSubtype(asset),
   }));
   const areas = compiledTwin.houseTwin.areas.map((area) => ({
@@ -312,6 +313,7 @@ function buildInspectionData(compiledTwin) {
     id: area.observationId,
     name: readStringField(area.rawObservation, ['name']) ?? area.observationId,
     placementState: inferAreaPlacementState(area.observationId, inByObservationId, outByObservationId),
+    provenance: formatProvenance(area.provenance),
   }));
   const relationships = compiledTwin.relationships.map((relationship) => ({
     confidence: formatConfidence(relationship.confidence, confidenceBySourceRef.get(`relationship:${relationship.relationshipId}`) ?? []),
