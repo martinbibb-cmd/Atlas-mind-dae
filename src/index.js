@@ -13,11 +13,13 @@ const {
   summarizeCompiledTwin,
 } = require('./import-shell');
 const { buildTwinMapData } = require('./twin-map');
+const { buildDomesticWaterServiceModel } = require('./service-model');
 
 module.exports = {
   DaedalusPackageValidationError,
   NO_PERSISTENCE_WARNING,
   buildTwinMapData,
+  buildDomesticWaterServiceModel,
   compileUnifiedPropertyTwin,
   handleImportShellRequest,
   importDaedalusPackage,

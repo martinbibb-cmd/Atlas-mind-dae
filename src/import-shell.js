@@ -1,6 +1,7 @@
 'use strict';
 
 const { DaedalusPackageValidationError, importDaedalusPackage } = require('./daedalus-package');
+const { buildDomesticWaterServiceModel } = require('./service-model');
 const { renderTwinMapViews } = require('./twin-map');
 
 const NO_PERSISTENCE_WARNING =
@@ -360,9 +361,13 @@ function buildInspectionData(compiledTwin) {
   const servicePoints = compiledTwin.servicePointObservations.map((observation) =>
     formatServicePointObservation(observation, areas, waterSupply),
   );
+  const domesticWaterService = formatDomesticWaterServiceModel(
+    buildDomesticWaterServiceModel(compiledTwin),
+  );
 
   return {
     areas,
+    domesticWaterService,
     evidence,
     provenance,
     relationships,
@@ -400,6 +405,10 @@ function renderInspectionSections(inspection) {
         ${renderServicePointTable(inspection.servicePoints)}
       </section>
       <section>
+        <h2>Domestic Water Service</h2>
+        ${renderDomesticWaterService(inspection.domesticWaterService)}
+      </section>
+      <section>
         <h2>Provenance</h2>
         ${renderProvenanceTable(inspection.provenance)}
       </section>
@@ -409,6 +418,20 @@ function renderInspectionSections(inspection) {
         ${renderWaterSupplyUncertainty(inspection.waterSupplyUncertainty)}
       </section>
       ${renderTwinMapViews(inspection)}`;
+}
+
+function renderDomesticWaterService(serviceModel) {
+  return `<table>
+    <tbody>
+      <tr><th>State</th><td>${escapeHtml(serviceModel.state)}</td></tr>
+      <tr><th>Related water observations</th><td>${serviceModel.relatedWaterObservationCount}</td></tr>
+      <tr><th>Related service points</th><td>${serviceModel.relatedServicePointCount}</td></tr>
+      <tr><th>Related assets</th><td>${escapeHtml(formatList(serviceModel.relatedAssets))}</td></tr>
+      <tr><th>Evidence count</th><td>${serviceModel.evidenceCount}</td></tr>
+      <tr><th>Uncertainty / missing data</th><td>${escapeHtml(formatList(serviceModel.uncertainty))}</td></tr>
+      <tr><th>Notes</th><td>${escapeHtml(formatList(serviceModel.notes))}</td></tr>
+    </tbody>
+  </table>`;
 }
 
 function renderSystemAssetsTable(systemAssets) {
@@ -670,6 +693,32 @@ function formatUncertaintyStates(confidenceStates, targetState) {
     }));
 }
 
+function formatDomesticWaterServiceModel(model) {
+  const missingData = [];
+  if (model.relatedWaterSupplyObservationIDs.length === 0) {
+    missingData.push('no water supply observations');
+  }
+  if (model.relatedServicePointObservationIDs.length === 0) {
+    missingData.push('no service point observations');
+  }
+  if (model.relatedSystemAssetIDs.length === 0) {
+    missingData.push('no domestic water assets');
+  }
+
+  return {
+    evidenceCount: model.relatedEvidenceIDs.length,
+    id: model.id,
+    notes: model.notes,
+    relatedAssets: model.relatedAssets.map((asset) => `${asset.id} (${asset.subtype})`),
+    relatedServicePointCount: model.relatedServicePointObservationIDs.length,
+    relatedWaterObservationCount: model.relatedWaterSupplyObservationIDs.length,
+    state: model.state,
+    uncertainty: model.uncertainty
+      .map((state) => `${state.sourceRef} ${state.path}: ${state.state}`)
+      .concat(missingData),
+  };
+}
+
 function formatWaterSupplyObservation(observation) {
   const values = Array.isArray(observation.values) ? observation.values : [];
   return {
@@ -891,4 +940,5 @@ module.exports = {
   renderImportShellPage,
   renderTwinMapViews,
   summarizeCompiledTwin,
+  formatDomesticWaterServiceModel,
 };

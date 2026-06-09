@@ -50,6 +50,9 @@ test('renders compiled twin summary for a valid package import', async () => {
   assert.match(body, /<h2>System assets<\/h2>/);
   assert.match(body, /<h2>Relationships<\/h2>/);
   assert.match(body, /<h2>Evidence<\/h2>/);
+  assert.match(body, /<h2>Domestic Water Service<\/h2>/);
+  assert.match(body, /no water supply observations/);
+  assert.match(body, /No pressure, flow, recovery/);
   assert.match(body, /<h2>Provenance<\/h2>/);
   assert.match(body, /<h2>Uncertainty<\/h2>/);
   assert.match(body, /boiler-001/);

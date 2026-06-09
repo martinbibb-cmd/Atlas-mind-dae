@@ -71,6 +71,14 @@ test('cross-repo heating survey fixture imports and renders without recommendati
   assert.deepEqual(inspection.servicePoints[0].observedIssues, ['poorFlow', 'mismatchSuspected']);
   assert.ok(inspection.servicePoints[0].linkedWaterMeasurements.some((value) => value.includes('water-flow-cup-bath')));
   assert.deepEqual(inspection.servicePoints[0].evidenceIDs, ['evidence-cylinder-photo']);
+  assert.equal(inspection.domesticWaterService.relatedWaterObservationCount, 5);
+  assert.equal(inspection.domesticWaterService.relatedServicePointCount, 1);
+  assert.deepEqual(inspection.domesticWaterService.relatedAssets, [
+    'boiler-kitchen (boiler:system boiler)',
+    'cylinder-airing-cupboard (cylinder:unvented cylinder)',
+  ]);
+  assert.equal(inspection.domesticWaterService.evidenceCount, 3);
+  assert.ok(inspection.domesticWaterService.uncertainty.some((value) => value.includes('water-not-tested')));
 
   const response = await handleImportShellRequest(
     new Request('https://example.com/import', {
@@ -92,6 +100,9 @@ test('cross-repo heating survey fixture imports and renders without recommendati
   assert.match(shellHtml, /Service point observations:<\/strong> 1/);
   assert.match(shellHtml, /Water Supply/);
   assert.match(shellHtml, /Service Points/);
+  assert.match(shellHtml, /Domestic Water Service/);
+  assert.match(shellHtml, /boiler-kitchen \(boiler:system boiler\)/);
+  assert.match(shellHtml, /No pressure, flow, recovery/);
   assert.match(shellHtml, /service-point-bath-tap/);
   assert.match(shellHtml, /pressureFlowTestKit/);
   assert.match(shellHtml, /Water supply uncertainty/);

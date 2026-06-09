@@ -17,6 +17,12 @@ Observed reality
   -> customer experience
 ```
 
+In implementation terms the Daedalus explanation sequence is:
+
+```text
+Observation -> Interpretation -> Service Model -> Experience Explanation
+```
+
 Service is not the same thing as a product.
 
 Service is not the same thing as a recommendation.
