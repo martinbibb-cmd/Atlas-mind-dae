@@ -95,3 +95,5 @@ This document does not:
 ## Decision Record
 
 The deployment boundary is recorded in [ADR-0001](adr/ADR-0001-deployment-boundary.md).
+
+The private evidence-processing boundary is recorded in [ADR-0002](adr/ADR-0002-private-evidence-processing.md).
