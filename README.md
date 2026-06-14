@@ -47,6 +47,10 @@ Daedalus Main is not responsible for:
 * [Daedalus Main Core Architecture Foundation](docs/core-architecture-foundation.md)
 * [Architecture Assumptions](docs/architecture-assumptions.md)
 * [Architecture Fixtures](docs/architecture-fixtures/README.md)
+* [Deployment Architecture](docs/DEPLOYMENT_ARCHITECTURE.md)
+* [Daedalus Hosting Model](docs/infrastructure/daedalus-hosting-model.md)
+* [Cloudflare Tunnel Runner](docs/infrastructure/cloudflare-tunnel-runner.md)
+* [Local LLM Boundary](docs/infrastructure/local-llm-boundary.md)
 
 ## Initial Main Import Pipeline
 
@@ -72,4 +76,4 @@ Daedalus-Main now includes a basic stateless web import shell for uploading or p
 - Validation errors are rendered as structured path/code/message/value rows
 - No persistence, OAuth, portal, PDF, or physics features are enabled in this shell
 
-See [Cloudflare deployment notes](docs/cloudflare-deployment.md).
+See [Cloudflare deployment notes](docs/cloudflare-deployment.md) and the [Cloudflare Tunnel Runner](docs/infrastructure/cloudflare-tunnel-runner.md).
